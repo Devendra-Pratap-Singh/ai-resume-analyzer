@@ -1,0 +1,5 @@
+- **Secure User Authentication:** A fully integrated sign-up and sign-in system that allows users to create personal accounts, securely manage their profiles, and save their analysis history.
+- **Comprehensive Resume Analysis & ATS Scoring:** An automated evaluation engine that processes uploaded resumes to provide a detailed breakdown of strengths (pros), weaknesses (cons), and a numerical ATS (Applicant Tracking System) compatibility score.
+- **Actionable Improvement Suggestions:** A feedback module that identifies specific sections of the resume requiring correction and provides tailored recommendations to improve professional impact and keyword optimization.
+- **AI-Driven Job Matching:** A career discovery feature that analyzes the user's extracted skills and experience to recommend relevant job roles and industries that align with their professional profile.
+- **User Dashboard & Contact Support:** A centralized interface for users to view past analysis reports and a dedicated contact section providing direct support via phone (+91-9717409975) and email (dpratapsingh42@gmail.com).
