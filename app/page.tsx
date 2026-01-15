@@ -443,7 +443,9 @@ export default function LandingPage() {
             <a href="#" className="hover:text-blue-600">Terms of Service</a>
             <a href="#" className="hover:text-blue-600">Cookie Policy</a>
           </div>
-          <p className="text-slate-400 text-sm font-medium">© 2024 AI-RESUME-ANALYSER. All rights reserved.</p>
+          <p className="text-slate-400 text-sm font-medium">
+  © {new Date().getFullYear()} AI-RESUME-ANALYSER. All rights reserved.
+</p>
         </div>
       </footer>
     </div>
