@@ -490,7 +490,7 @@ function Dashboard({ user, onLogout }: { user: any, onLogout: () => void }) {
         setProgress(prev => (prev < 90 ? prev + 2 : prev))
       }, 200)
 
-      const response = await fetch('/api/analyze', {
+      const response = await fetch(window.location.origin + '/api/analyze', {
         method: 'POST',
         body: formData,
       })

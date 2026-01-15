@@ -3,30 +3,286 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createRequire } from 'module'
+import axios from 'axios'
 
 const require = createRequire(import.meta.url)
 
+function generateSmartSuggestions(content: string) {
+  const text = content.toLowerCase()
+  const suggestions: string[] = []
+
+  const hasNumbers = /\d+%|\d+\+|\d+ users|\d+ clients|\d+ projects|\d+ ms|\d+ sec/.test(text)
+  const actionVerbs = ['built', 'developed', 'designed', 'implemented', 'optimized', 'led', 'created', 'improved', 'engineered']
+  const hasActionVerbs = actionVerbs.some(verb => text.includes(verb))
+
+  const genericPhrases = [
+    'responsible for',
+    'worked on',
+    'helped in',
+    'involved in',
+    'participated in'
+  ]
+
+  const hasGeneric = genericPhrases.some(p => text.includes(p))
+
+  const projectKeywords = ['project', 'application', 'system', 'platform', 'app']
+  const hasProjects = projectKeywords.some(p => text.includes(p))
+
+  // 1. Quantification
+  if (!hasNumbers) {
+    suggestions.push(
+      "Add quantified achievements to your experience and projects (e.g. 'improved performance by 30%', 'served 500+ users')."
+    )
+  }
+
+  // 2. Action verbs
+  if (!hasActionVerbs) {
+    suggestions.push(
+      "Use strong action verbs like 'built', 'optimized', 'implemented', 'engineered' to start your bullet points."
+    )
+  }
+
+  // 3. Generic wording
+  if (hasGeneric) {
+    suggestions.push(
+      "Replace generic phrases like 'worked on' or 'helped in' with specific technical contributions."
+    )
+  }
+
+  // 4. Project depth
+  if (hasProjects && !text.includes('deployed') && !text.includes('production')) {
+    suggestions.push(
+      "Mention deployment details of your projects (e.g. hosted on Vercel, Render, AWS, Firebase)."
+    )
+  }
+
+  // 5. Tech stack clarity
+  if (!text.includes('react') && !text.includes('node') && !text.includes('python')) {
+    suggestions.push(
+      "Clearly list the technologies used in each project (e.g. React, Node.js, MongoDB, Python, SQL)."
+    )
+  }
+
+  // 6. Leadership / collaboration
+  if (!text.includes('team') && !text.includes('collaborat')) {
+    suggestions.push(
+      "Highlight collaboration or teamwork experience to show real-world working ability."
+    )
+  }
+
+  return suggestions
+}
+
+// 2️⃣ ADD analyzeResumeAdvanced HERE
+// ------------------------------
+const analyzeResumeAdvanced = (content: string, aiScore: number) => {
+  const lower = content.toLowerCase()
+
+  let structureScore = 0
+  let qualityScore = 0
+  let penalty = 0
+  let bonus = 0
+
+  const pros: string[] = []
+  const cons: string[] = []
+  const recommendations: string[] = []
+
+  // ---------------- STRUCTURE ----------------
+  const hasExperience = lower.includes('experience') || lower.includes('intern')
+  const hasProjects = lower.includes('projects')
+  const hasSkills = lower.includes('skills')
+  const hasEducation = lower.includes('education') || lower.includes('university') || lower.includes('college')
+
+  if (hasExperience) structureScore += 18
+  if (hasProjects) structureScore += 18
+  if (hasSkills) structureScore += 12
+  if (hasEducation) structureScore += 12
+
+  if (!hasExperience) {
+    penalty += 18
+    cons.push("No experience/internship section found")
+    recommendations.push("Add an Experience or Internship section even for academic, freelance, or training work.")
+  } else pros.push("Experience section detected")
+
+  if (!hasProjects) {
+    penalty += 10
+    cons.push("Projects section missing")
+    recommendations.push("Add a Projects section to showcase hands-on work.")
+  } else pros.push("Projects section present")
+
+  // ---------------- QUALITY ----------------
+
+  const bulletMatches = content.match(/•|-|\*/g)
+  if (bulletMatches && bulletMatches.length >= 4) {
+    qualityScore += 14
+    pros.push("Good use of bullet points")
+  } else {
+    penalty += 10
+    cons.push("Poor or missing bullet points")
+    recommendations.push("Use bullet points to describe responsibilities and achievements.")
+  }
+
+  const metricRegex = /\d+%|\d+\+|\d+\s?(users|clients|projects|months|years|apps)/i
+  if (metricRegex.test(content)) {
+    qualityScore += 16
+    pros.push("Quantified achievements found")
+  } else {
+    penalty += 12
+    cons.push("Lacks quantified impact")
+    recommendations.push("Add numbers (e.g. 'improved performance by 30%', 'served 500+ users').")
+  }
+
+  const actionVerbs = ['built', 'developed', 'designed', 'implemented', 'optimized', 'led', 'created']
+  const verbFound = actionVerbs.some(v => lower.includes(v))
+  if (verbFound) {
+    qualityScore += 8
+  } else {
+    penalty += 6
+    cons.push("Weak or missing action verbs")
+    recommendations.push("Start bullet points with action verbs like built, optimized, led, designed.")
+  }
+
+  // ---------------- LENGTH ----------------
+  if (content.length > 800) bonus += 6
+  if (content.length < 400) {
+    penalty += 8
+    cons.push("Resume too short")
+    recommendations.push("Expand your content with more details about projects, skills, and learning.")
+  }
+
+  // ---------------- STUDENT BOOSTER ----------------
+  if (hasProjects && hasSkills && hasEducation && bulletMatches && bulletMatches.length >= 4) {
+    bonus += 8
+  }
+
+  // ---------------- RAW SCORE ----------------
+  let rawScore =
+    structureScore +
+    qualityScore +
+    Math.round(aiScore * 0.35) +
+    bonus -
+    penalty
+
+  // ---------------- NORMALIZATION ----------------
+  // Compress top end so 95 → ~70
+  rawScore = Math.round(20 + (rawScore - 20) * 0.65)
+
+  // ---------------- BOUNDS ----------------
+  if (rawScore < 20) rawScore = 20
+  if (rawScore > 85) rawScore = 85
+
+  return {
+    score: rawScore,
+    pros: pros.length ? pros : ["Basic structure present"],
+    cons: cons.length ? cons : ["No major issues detected"],
+    recommendations: recommendations.length
+      ? recommendations
+      : ["Improve formatting and add more quantified achievements"],
+  }
+}
+
+
+
+function generateGenericProjectSuggestions(content: string) {
+  const text = content.toLowerCase()
+  const suggestions: string[] = []
+
+  // Try to detect project-like patterns
+  const projectIndicators = [
+    'project',
+    'application',
+    'system',
+    'platform',
+    'app',
+    'website',
+    'dashboard',
+    'portal'
+  ]
+
+  const hasProjects = projectIndicators.some(word => text.includes(word))
+
+  if (!hasProjects) return suggestions
+
+  // Check for metrics
+  const hasNumbers = /\d+%|\d+\+|\d+ users|\d+ clients|\d+ projects|\d+ ms|\d+ sec/.test(text)
+
+  if (!hasNumbers) {
+    suggestions.push(
+      "For each project, add measurable impact (e.g. 'served 500+ users', 'reduced load time by 40%', 'handled 1000+ records')."
+    )
+  }
+
+  // Check for deployment
+  const deploymentPlatforms = ['vercel', 'render', 'aws', 'firebase', 'netlify', 'railway', 'heroku']
+  const hasDeployment = deploymentPlatforms.some(p => text.includes(p))
+
+  if (!hasDeployment) {
+    suggestions.push(
+      "Mention where your projects are deployed (e.g. Vercel, AWS, Firebase) to show production readiness."
+    )
+  }
+
+  // Check for tech stack clarity
+  const techKeywords = ['react', 'node', 'express', 'mongodb', 'sql', 'python', 'django', 'flask', 'next', 'tailwind']
+  const hasTechStack = techKeywords.some(t => text.includes(t))
+
+  if (!hasTechStack) {
+    suggestions.push(
+      "Clearly specify the technology stack used in each project (e.g. React, Node.js, MongoDB, Python, SQL)."
+    )
+  }
+
+  // Check for action verbs in project bullets
+  const actionVerbs = ['built', 'developed', 'designed', 'implemented', 'engineered', 'optimized', 'created']
+  const hasActionVerbs = actionVerbs.some(v => text.includes(v))
+
+  if (!hasActionVerbs) {
+    suggestions.push(
+      "Start project bullet points with strong action verbs like 'Built', 'Designed', 'Implemented', 'Optimized'."
+    )
+  }
+
+  return suggestions
+}
+
+
 export async function POST(req: NextRequest) {
+  console.log("🔥🔥🔥 ROUTE ENTERED – VERY TOP")
+
   try {
+    console.log("🔥 STEP 1 – Before Supabase")
+
     const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+
+    console.log("🔥 STEP 2 – After Supabase createClient")
+
+    const { data: { user }, error } = await supabase.auth.getUser()
+
+    console.log("🔥 STEP 3 – After getUser")
+    console.log("USER:", user)
+    console.log("ERROR:", error)
+
+    console.log("🔥 STEP 4 – ENV CHECK")
+    console.log("HF TOKEN:", process.env.HF_API_TOKEN)
+    console.log("HF TOKEN EXISTS:", !!process.env.HF_API_TOKEN)
+    console.log("HF TOKEN LENGTH:", process.env.HF_API_TOKEN?.length)
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    console.log("✅ SUPABASE USER OK:", user.email)
+
+    console.log("HF TOKEN:", process.env.HF_API_TOKEN)
+    console.log("HF TOKEN EXISTS:", !!process.env.HF_API_TOKEN)
+    console.log("HF TOKEN LENGTH:", process.env.HF_API_TOKEN?.length)
+    
     const formData = await req.formData()
     const file = formData.get('file') as File
 
     if (!file) {
       return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
     }
-
-    console.log('File Name:', file.name)
-    console.log('File Type:', file.type)
-    console.log('File Size:', file.size)
 
     const fileName = file.name
     const fileType = file.type
@@ -36,8 +292,9 @@ export async function POST(req: NextRequest) {
 
     let text = ''
 
+    // ===================== FILE PARSING =====================
     try {
-      // ===================== PDF HANDLING =====================
+      // PDF
       if (fileType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf')) {
         const pdfParse = require('pdf-parse')
         const data = await pdfParse(buffer)
@@ -51,7 +308,7 @@ export async function POST(req: NextRequest) {
         text = data.text
       }
 
-      // ===================== DOCX HANDLING =====================
+      // DOCX
       else if (
         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
         fileName.toLowerCase().endsWith('.docx')
@@ -66,7 +323,7 @@ export async function POST(req: NextRequest) {
         text = result.value
       }
 
-      // ===================== UNSUPPORTED =====================
+      // Unsupported
       else {
         return NextResponse.json(
           { error: 'Unsupported file type. Please upload PDF or DOCX only.' },
@@ -93,7 +350,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ===================== LOCAL ANALYSIS ENGINE =====================
+    // ===================== ATS HEURISTIC ANALYSIS =====================
 
     const analyzeLocally = (content: string) => {
       const lowerContent = content.toLowerCase()
@@ -187,22 +444,88 @@ export async function POST(req: NextRequest) {
 
       return {
         score: Math.min(score, 99),
-        summary: `Local Analysis: Your resume contains ${foundSections.length} key professional sections. ${
-          score > 70
-            ? 'It is well-structured for ATS systems.'
-            : 'It needs more optimization to pass automated filters.'
-        }`,
-        pros: pros.length > 0 ? pros : ['Basic contact information found'],
-        cons: cons.length > 0 ? cons : ['No major structural issues found'],
-        recommendations:
-          recommendations.length > 0
-            ? recommendations
-            : ["Quantify your achievements with numbers (e.g., 'Increased sales by 20%')"],
+        pros,
+        cons,
+        recommendations,
         jobs: jobMatches.slice(0, 3),
       }
     }
 
-    const analysis = analyzeLocally(text)
+    // ===================== HUGGINGFACE AI ANALYSIS =====================
+
+    const analyzeWithAI = async (content: string) => {
+  const idealProfile = `Strong resume with clear experience, skills, projects, education, quantified achievements and action verbs.`
+
+  const endpoint =
+    'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2'
+
+  const headers = {
+    Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
+    'Content-Type': 'application/json',
+  }
+
+  const response = await axios.post(
+    endpoint,
+    {
+      inputs: {
+        source_sentence: idealProfile,
+        sentences: [content],
+      },
+    },
+    { headers, timeout: 20000 }
+  )
+
+  const similarity = response.data[0] // value between 0–1
+  const score = Math.round(similarity * 100)
+
+  return {
+    score,
+    strengths:
+      score > 75
+        ? ['Strong structure', 'Good skill relevance', 'Clear experience section']
+        : ['Basic structure present'],
+    weaknesses:
+      score < 60
+        ? ['Lacks quantified impact', 'Needs clearer experience bullets']
+        : ['Minor formatting improvements needed'],
+    suggestions: [
+      'Add more quantified achievements',
+      'Improve clarity in experience section',
+      'Use strong action verbs like built, optimized, led',
+    ],
+  }
+}
+
+
+
+
+    // ===================== HYBRID ANALYSIS =====================
+
+    const localAnalysis = analyzeLocally(text)
+const aiAnalysis = await analyzeWithAI(text)
+
+// 🔥 Advanced ATS + Quality + AI scoring
+const advancedAnalysis = analyzeResumeAdvanced(text, aiAnalysis.score)
+
+const smartSuggestions = [
+  ...generateSmartSuggestions(text),
+  ...generateGenericProjectSuggestions(text)
+]
+
+const analysis = {
+  score: advancedAnalysis.score,
+  summary: 'Advanced ATS + Quality + AI Hybrid Analysis',
+  pros: advancedAnalysis.pros,
+  cons: advancedAnalysis.cons,
+  recommendations: [
+    ...advancedAnalysis.recommendations,
+    ...smartSuggestions
+  ],
+  jobs: localAnalysis.jobs,
+}
+
+
+    // ===================== DB SAVE =====================
 
     const { data, error: dbError } = await supabase
       .from('resumes')
@@ -216,9 +539,9 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (dbError) {
-  console.error('DB Insert Error:', dbError)
-  return NextResponse.json({ error: dbError.message }, { status: 500 })
-}
+      console.error('DB Insert Error:', dbError)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
+    }
 
     return NextResponse.json({ ...analysis, id: data?.id })
   } catch (error: any) {
