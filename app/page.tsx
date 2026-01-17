@@ -322,7 +322,7 @@ export default function LandingPage() {
                     ))}
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-bold text-slate-900">Joined by 10,000+ users</p>
+                    <p className="text-sm font-bold text-slate-900">Early access • Actively evolving</p>
                     <div className="flex text-amber-400">
                       {[1, 2, 3, 4, 5].map(i => <CheckCircle2 key={i} size={12} className="fill-current" />)}
                     </div>
