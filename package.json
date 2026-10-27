@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_DISABLE_ESLINT=1 NEXT_DISABLE_TYPECHECK=1 next dev --turbopack",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "oxlint",
@@ -24,6 +24,7 @@
     "posthog-js": "^1.270.1",
     "react": "^19",
     "react-dom": "^19",
+    "supports-color": "^11.0.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

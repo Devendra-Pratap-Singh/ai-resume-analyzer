@@ -684,7 +684,7 @@ function Dashboard({ user, onLogout }: { user: any, onLogout: () => void }) {
               key="results"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-10"
+              className="space-y-6"
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -701,9 +701,9 @@ function Dashboard({ user, onLogout }: { user: any, onLogout: () => void }) {
                 </div>
               </div>
 
-              <div className="grid lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
                 {/* ATS Score Card */}
-                <Card className="lg:col-span-1 border-none shadow-2xl shadow-slate-200/50 bg-white overflow-hidden">
+                <Card className="lg:col-span-4 border-none shadow-lg shadow-slate-200/40 bg-white overflow-hidden">
                   <div className="h-2 bg-blue-600 w-full"></div>
                   <CardHeader>
                     <CardTitle className="text-xl font-black flex items-center gap-2">
@@ -745,7 +745,7 @@ function Dashboard({ user, onLogout }: { user: any, onLogout: () => void }) {
                 </Card>
 
                 {/* Feedback Card */}
-                <Card className="lg:col-span-2 border-none shadow-2xl shadow-slate-200/50 bg-white overflow-hidden">
+                <Card className="lg:col-span-8 border-none shadow-lg shadow-slate-200/40 bg-white overflow-hidden">
                   <div className="h-2 bg-indigo-600 w-full"></div>
                   <CardHeader>
                     <CardTitle className="text-xl font-black flex items-center gap-2">

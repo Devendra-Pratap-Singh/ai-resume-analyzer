@@ -23,6 +23,8 @@ function generateSmartSuggestions(content: string) {
     'participated in'
   ]
 
+  
+
   const hasGeneric = genericPhrases.some(p => text.includes(p))
 
   const projectKeywords = ['project', 'application', 'system', 'platform', 'app']
@@ -451,50 +453,183 @@ export async function POST(req: NextRequest) {
       }
     }
 
+
+    //change
+    
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+async function postGeminiWithRetry(
+  endpoint: string,
+  payload: unknown,
+  apiKey: string
+) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await axios.post(endpoint, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        timeout: 60000,
+      });
+    } catch (error) {
+      const status = axios.isAxiosError(error)
+        ? error.response?.status
+        : undefined;
+
+      const retryable = status === 503 || status === 429 ||
+        status === 408 || (status !== undefined && status >= 500);
+
+      if (!retryable || attempt === 2) {
+        throw error;
+      }
+
+      await sleep(1000 * 2 ** attempt);
+    }
+  }
+
+  throw new Error("Gemini request failed after retries");
+}
+
+
     // ===================== HUGGINGFACE AI ANALYSIS =====================
 
-    const analyzeWithAI = async (content: string) => {
-  const idealProfile = `Strong resume with clear experience, skills, projects, education, quantified achievements and action verbs.`
+    
+const analyzeWithAI = async (content: string) => {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is missing from environment variables')
+  }
 
   const endpoint =
-    'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2'
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
-  const headers = {
-    Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
-    'Content-Type': 'application/json',
-  }
-
-  const response = await axios.post(
+  const response = await postGeminiWithRetry(
     endpoint,
     {
-      inputs: {
-        source_sentence: idealProfile,
-        sentences: [content],
-      },
-    },
-    { headers, timeout: 20000 }
-  )
+      contents: [
+        {
+          parts: [
+            {
+              text: `
+You are an experienced resume reviewer and ATS analyst.
 
-  const similarity = response.data[0] // value between 0–1
-  const score = Math.round(similarity * 100)
+Evaluate the resume below using only information present in it.
+
+Score it from 0 to 100 using these criteria:
+- Resume structure and readability: 20 points
+- Skills and relevant keywords: 20 points
+- Experience and project descriptions: 25 points
+- Specific, measurable achievements: 20 points
+- Clarity, action verbs and professional presentation: 15 points
+
+Be fair to students and freshers. Do not penalize students
+unfairly for having limited professional experience.
+Do not invent skills, achievements, employers or qualifications.
+Do not claim that this is the score produced by a particular
+employer's ATS.
+
+Return valid JSON with this exact structure:
+{
+  "score": 75,
+  "strengths": ["Specific strength from the resume"],
+  "weaknesses": ["Specific issue found in the resume"],
+  "suggestions": ["Actionable improvement"]
+}
+
+Return 3 to 5 strengths, weaknesses and suggestions where
+the resume provides enough evidence. Avoid generic feedback.
+
+
+FEEDBACK STYLE RULES:
+- Keep every strength to one short sentence, ideally 8–15 words.
+- Keep every weakness to one short sentence, ideally 8–15 words.
+- Keep every recommendation concise, ideally 10–18 words.
+- Use simple, direct language. Avoid headings inside individual feedback points.
+- Do not repeat the same observation in multiple points.
+- Never invent achievements, metrics, skills, dates, or resume details.
+- Mention a potential issue only when supported by the actual resume text.
+- If a section is missing, state that briefly.
+
+
+RESUME:
+${content.slice(0, 20000)}
+              `
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            score: { type: 'INTEGER' },
+            strengths: {
+              type: 'ARRAY',
+              items: { type: 'STRING' }
+            },
+            weaknesses: {
+              type: 'ARRAY',
+              items: { type: 'STRING' }
+            },
+            suggestions: {
+              type: 'ARRAY',
+              items: { type: 'STRING' }
+            }
+          },
+          required: [
+            'score',
+            'strengths',
+            'weaknesses',
+            'suggestions'
+          ]
+        }
+      }
+    },
+    // {
+    //   headers: {
+    //     'x-goog-api-key': apiKey,
+    //     'Content-Type': 'application/json'
+    //   },
+    //   timeout: 30000
+    // },
+    apiKey
+  );
+
+  const resultText =
+    response.data.candidates?.[0]?.content?.parts
+      ?.map((part: { text?: string }) => part.text ?? '')
+      .join('')
+
+  if (!resultText) {
+    throw new Error('Gemini returned an empty response')
+  }
+
+  const result = JSON.parse(resultText)
+
+  if (
+    !Number.isInteger(result.score) ||
+    result.score < 0 ||
+    result.score > 100 ||
+    !Array.isArray(result.strengths) ||
+    !Array.isArray(result.weaknesses) ||
+    !Array.isArray(result.suggestions)
+  ) {
+    throw new Error('Gemini returned an invalid analysis response')
+  }
 
   return {
-    score,
-    strengths:
-      score > 75
-        ? ['Strong structure', 'Good skill relevance', 'Clear experience section']
-        : ['Basic structure present'],
-    weaknesses:
-      score < 60
-        ? ['Lacks quantified impact', 'Needs clearer experience bullets']
-        : ['Minor formatting improvements needed'],
-    suggestions: [
-      'Add more quantified achievements',
-      'Improve clarity in experience section',
-      'Use strong action verbs like built, optimized, led',
-    ],
+    score: result.score,
+    strengths: result.strengths,
+    weaknesses: result.weaknesses,
+    suggestions: result.suggestions
   }
 }
+
 
 
 
@@ -504,9 +639,12 @@ export async function POST(req: NextRequest) {
     const localAnalysis = analyzeLocally(text)
 const aiAnalysis = await analyzeWithAI(text)
 
-// 🔥 Advanced ATS + Quality + AI scoring
-const advancedAnalysis = analyzeResumeAdvanced(text, aiAnalysis.score)
+const advancedAnalysis = analyzeResumeAdvanced(
+  text,
+  aiAnalysis.score
+)
 
+// 🔥 Advanced ATS + Quality + AI scoring
 const smartSuggestions = [
   ...generateSmartSuggestions(text),
   ...generateGenericProjectSuggestions(text)
@@ -514,14 +652,27 @@ const smartSuggestions = [
 
 const analysis = {
   score: advancedAnalysis.score,
-  summary: 'Advanced ATS + Quality + AI Hybrid Analysis',
-  pros: advancedAnalysis.pros,
-  cons: advancedAnalysis.cons,
-  recommendations: [
-    ...advancedAnalysis.recommendations,
-    ...smartSuggestions
+  summary: 'Gemini AI + ATS Hybrid Analysis',
+  pros: [
+    ...new Set([
+      ...aiAnalysis.strengths,
+      ...advancedAnalysis.pros
+    ])
   ],
-  jobs: localAnalysis.jobs,
+  cons: [
+    ...new Set([
+      ...aiAnalysis.weaknesses,
+      ...advancedAnalysis.cons
+    ])
+  ],
+  recommendations: [
+    ...new Set([
+      ...aiAnalysis.suggestions,
+      ...advancedAnalysis.recommendations,
+      ...smartSuggestions
+    ])
+  ],
+  jobs: localAnalysis.jobs
 }
 
 
